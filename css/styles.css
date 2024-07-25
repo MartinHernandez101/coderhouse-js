@@ -46,9 +46,6 @@ a {
 .board-container {
     height: 100%;
     width: 80%;
-    border-color: #ffd277;
-    border-style: dashed;
-    border-width: 1px;
     display: flex;
     flex-direction: column;
 }
@@ -59,9 +56,6 @@ a {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    border-style: dashed;
-    border-color: aqua;
-    border-width: 1px;
 }
 
 .points-container {
@@ -70,9 +64,6 @@ a {
     height: 100%;
     width: auto;
     justify-content: space-around;
-    border-style: dashed;
-    border-color: red;
-    border-width: 1px;
 }
 
 .buttons-container {
@@ -81,9 +72,6 @@ a {
     width: 100%;
     justify-content: space-evenly;
     align-items: center;
-    border-style: dashed;
-    border-color: green;
-    border-width: 1px;
 }
 
 .points-title {
@@ -131,9 +119,6 @@ a {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    border-style: dashed;
-    border-color: green;
-    border-width: 1px;
 }
 
 .card-in-slot {
