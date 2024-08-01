@@ -2,7 +2,9 @@ const cardTypes = ['basto', 'espada', 'copa', 'oro']
 const numberOfPlayers = 2
 const teams = [ 1, 2 ]
 const envidoButtonNames = ["Envido", "Real", "Falta" ]
-const trucoButtonNames = ["Truco", "Re-Truco", "Vale-4"]
+const trucoButtonNames = ["Truco", "ReTruco", "Vale4"]
+const confirmationButtonNames = ["success", "danger"]
+let previousEnvidoState = 0
 let players = []
 
 const createDeck = () => {
@@ -99,11 +101,65 @@ const createPlayers = () => {
             name: `Player${players.length + 1}`,
             hand: hands[players.length],
             points: 0,
-            team: (players.length % 2) == 0 ? teams[0] : teams[1]
+            team: (players.length % 2) == 0 ? teams[0] : teams[1],
+            playedTruco: false
         })
    }
 }
 
+function calculatePointsForTurnEnd() {
+    let trucoState = parseInt(localStorage.getItem("trucoState"))
+    let starter = localStorage.getItem("starter")
+    let machineHand = players[1].hand || []
+    let ownHand = players[0].hand || []
+
+    let ownRounds = 0
+    let machineRounds = 0
+
+    let roundResults = []
+
+    for (let i = 0; i < 3; i++) {
+        let ownPlayedCard = ownHand.find(card => card.boardSlot === i + 1)
+        let machinePlayedCard = machineHand.find(card => card.boardSlot === i + 1)
+
+        if (ownPlayedCard && machinePlayedCard) {
+            if (ownPlayedCard.power > machinePlayedCard.power) {
+                ownRounds++
+                roundResults[i] = "own"
+            } else if (ownPlayedCard.power < machinePlayedCard.power) {
+                machineRounds++
+                roundResults[i] = "machine"
+            } else {
+                if (starter == "0") {
+                    ownRounds++
+                    roundResults[i] = "own"
+                } else {
+                    machineRounds++
+                    roundResults[i] = "machine"
+                }
+            }
+        }
+    }
+
+    if (roundResults.length >= 2) {
+        if (roundResults[0] === roundResults[1]) {
+            if (trucoState == 0) {
+                players[0].points += roundResults[0] == "own" ? 1 : 0
+                players[1].points += roundResults[0] == "machine" ? 1 : 0
+            }
+            return true
+        } else if (roundResults[1] === "own" && roundResults[2] === "own") {
+            players[0].points += trucoState == 3 ? 4 : trucoState == 2 ? 3 : trucoState == 1 ? 2 : 1
+            return true
+        } else if (roundResults[1] === "machine" && roundResults[2] === "machine") {
+            players[1].points += trucoState == 3 ? 4 : trucoState == 2 ? 3 : trucoState == 1 ? 2 : 1
+            return true
+        }
+    }
+
+    return false
+}
+ 
 function calculateEnvidoPoints () {
     let playerCards = []
     let machineCards = []
@@ -126,21 +182,25 @@ function calculateEnvidoPoints () {
     let totalMachine = machineCards.length == 1 ? machineCards[0].envidoValue : machineCards[0].envidoValue + machineCards[1].envidoValue + 20
 
     if (totalPlayer > totalMachine) {
-        players[0].points = envidoState == "1" ? 2 : envidoState == "2" ? 3 : 15
+        players[0].points += envidoState == "1" ? 2 : envidoState == "2" ? 3 : 15
     } else if (totalPlayer == totalMachine) {
         if (starter == "0") {
-            players[0].points = envidoState == "1" ? 2 : envidoState == "2" ? 3 : 15
+            players[0].points += envidoState == "1" ? 2 : envidoState == "2" ? 3 : 15
         } else {
-            players[1].points = envidoState == "1" ? 2 : envidoState == "2" ? 3 : 15
+            players[1].points += envidoState == "1" ? 2 : envidoState == "2" ? 3 : 15
         }
     } else {
-        players[1].points = envidoState == "1" ? 2 : envidoState == "2" ? 3 : 15
+        players[1].points += envidoState == "1" ? 2 : envidoState == "2" ? 3 : 15
     }
+
+    return totalMachine
 }
 
 function playMachineEnvido () {
     let isEnvidoEnabled = localStorage.getItem("isEnvidoEnabled")
-    let envidoState = localStorage.getItem("envidoState")
+    let envidoState = parseInt(localStorage.getItem("envidoState"))
+    previousEnvidoState = envidoState
+
     if (isEnvidoEnabled == "false") {
         renderMachineMessage("Envido!")
         localStorage.setItem("isEnvidoEnabled", true)
@@ -155,34 +215,36 @@ function playMachineEnvido () {
 
 function handleEnvidoChoice(envidoState) {
     let choice = Math.floor(Math.random() * 5)
-    let eState = parseInt(envidoState)
     
-    if (choice == 0 && eState >= 1) {
+    if (choice == 0 && envidoState >= 1) {
         renderMachineMessage("Quiero!")
         clearButtons()
         localStorage.setItem("isEnvidoEnabled", false)
         renderActionButtons(["Truco", "Mazo"])
-        calculateEnvidoPoints()
-    } else if (choice == 1 && eState <= 1) {
+        let machinePoints = calculateEnvidoPoints()
+        renderMachineMessage(machinePoints < 20 ? "Mesa" : machinePoints)
+    } else if (choice == 1 && envidoState <= 1) {
         renderMachineMessage("Real envido!")
         localStorage.setItem("envidoState", 2)
         clearButtons()
         renderActionButtons(["Falta"])
         renderConfirmationButtons()
-    } else if (choice == 2 && eState <= 2) {
+    } else if (choice == 2 && envidoState <= 2) {
         renderMachineMessage("Falta envido!")
         localStorage.setItem("envidoState", 3)
         clearButtons()
         renderConfirmationButtons()
     } else if (choice == 3) {
         renderMachineMessage("No quiero!")
-        if (eState == 1) {
+        if (envidoState == 1 || previousEnvidoState == 0) {
             players[0].points += 1
         } else {
+            players[0].points += previousEnvidoState > 0 ? 1 : 0
             calculateEnvidoPoints()
         }
         localStorage.setItem("isEnvidoEnabled", false)
         clearButtons()
+        renderActionButtons(["Truco", "Mazo"])
     } else {
         handleEnvidoChoice(envidoState)
     }
@@ -216,6 +278,7 @@ function getValidMachineDecision(isEnvidoEnabled, envidoState, isTrucoEnabled, t
 
     while (!validChoice) {
         let randomChoice = Math.floor(Math.random() * 2)
+        console.log(randomChoice)
         if (randomChoice == 0) {
             if (isEnvidoEnabled == "true" || isTrucoEnabled == "true") {
                 continue
@@ -229,8 +292,7 @@ function getValidMachineDecision(isEnvidoEnabled, envidoState, isTrucoEnabled, t
                 validChoice = true
             }
         }
-        // else { 
-        //     TODO implement truco function
+        // else {
         //     decision = "playTruco"
         //     validChoice = true
         // }
@@ -248,6 +310,7 @@ function getMachineDecision() {
     let decision = getValidMachineDecision(isEnvidoEnabled, envidoState, isTrucoEnabled, trucoState)
     if (decision === "dropCard") {
         dropMachineCard()
+        renderButtonsAfterMachineDropCard()
     } else if (decision === "playEnvido") {
         playMachineEnvido()
     } 
@@ -258,14 +321,67 @@ function getMachineDecision() {
     return decision
 }
 
+function shouldTurnEnd() {
+    let starter = localStorage.getItem("starter")
+    let machineHand = players[1].hand || []
+    let ownHand = players[0].hand || []
+
+    let ownRounds = 0
+    let machineRounds = 0
+
+    let roundResults = []
+
+    for (let i = 0; i < 3; i++) {
+        let ownPlayedCard = ownHand.find(card => card.boardSlot === i + 1)
+        let machinePlayedCard = machineHand.find(card => card.boardSlot === i + 1)
+
+        if (ownPlayedCard && machinePlayedCard) {
+            if (ownPlayedCard.power > machinePlayedCard.power) {
+                ownRounds++
+                roundResults[i] = "own"
+            } else if (ownPlayedCard.power < machinePlayedCard.power) {
+                machineRounds++
+                roundResults[i] = "machine"
+            } else {
+                if (starter == "0") {
+                    ownRounds++
+                    roundResults[i] = "own"
+                } else {
+                    machineRounds++
+                    roundResults[i] = "machine"
+                }
+            }
+        }
+    }
+
+    if (roundResults.length >= 2) {
+        if (roundResults[0] === roundResults[1]) {
+            return true
+        } else if (roundResults[1] === "own" && roundResults[2] === "own") {
+            return true
+        } else if (roundResults[1] === "machine" && roundResults[2] === "machine") {
+            return true
+        }
+    }
+
+    return ownRounds >= 2 || machineRounds >= 2;
+}
+
 function startMachinePlay() {
     setTimeout(() => {
-        getMachineDecision()   
+        getMachineDecision()
     }, 1000)
 
     setTimeout(() => {
         shouldMachinePlayAgain()   
     }, 1200)
+
+    setTimeout(() => {
+        if (shouldTurnEnd()){
+            endTurn()
+            startTurn()
+        }
+    }, 1300)
 }
 
 function shouldMachinePlayAgain() {
@@ -320,7 +436,9 @@ function shouldDropCard() {
 }
 
 const startTurn = () => {
+    previousEnvidoState = 0
     createPlayers()
+    clearCardSlots()
     clearButtons()
     localStorage.setItem("envidoState", 0)
     localStorage.setItem("trucoState", 0)
@@ -329,6 +447,7 @@ const startTurn = () => {
     let starter = localStorage.getItem("starter")
     
     if (starter == "0") {
+        renderMachineMessage("Empezas vos")
         renderActionButtons(["Envido", "Real", "Falta", "Truco", "Mazo"])
         renderPlayerCards()
     } else {
@@ -339,6 +458,7 @@ const startTurn = () => {
 }
 
 const endTurn = () => {
+    calculatePointsForTurnEnd()
     let playerStoragePoints = localStorage.getItem("playerPoints")
     let machineStoragePoints = localStorage.getItem("machinePoints")
     if (playerStoragePoints) {
@@ -355,9 +475,20 @@ const endTurn = () => {
 
     let starter = localStorage.getItem("starter")
     localStorage.setItem("starter", starter == "0" ? 1 : 0)
+    renderPoints()
 }
 
 // *********************** RENDERING:
+
+//-- points --
+
+function renderPoints() {
+    const machinePointsDiv = document.getElementById("machine-points")
+    const ownPointsDiv = document.getElementById("own-points")
+
+    ownPointsDiv.innerText = localStorage.getItem("playerPoints")
+    machinePointsDiv.innerText = localStorage.getItem("machinePoints")
+}
 
 //-- card slots --
 
@@ -384,13 +515,50 @@ function clearCardSlots() {
 
 //-- buttons --
 
-let buttonsContainer = document.getElementById("buttons")
+const buttonsContainer = document.getElementById("buttons")
+const envidoButton = document.getElementById("envido-button")
+const realButton = document.getElementById("real-button")
+const faltaButton = document.getElementById("falta-button")
+const trucoButton = document.getElementById("truco-button")
+const vale4Button = document.getElementById("vale4-button")
+const retrucoButton = document.getElementById("retruco-button")
+const successButton = document.getElementById("success-button")
+const mazoButton = document.getElementById("mazo-button")
+const dangerButton = document.getElementById("danger-button")
 
-function renderActionButtons (buttonNames) { // ["Falta", "Real", "Envido", "Truco", "Re-Truco", "Vale-4", "Mazo"]
+function getButtonById(buttonId) {
+    switch(buttonId) {
+        case "envido-button":
+            return envidoButton
+        case "real-button":
+            return realButton
+        case "falta-button":
+            return faltaButton
+        case "truco-button":
+            return trucoButton
+        case "retruco-button":
+            return retrucoButton
+        case "vale4-button":
+            return vale4Button
+        case "mazo-button":
+            return mazoButton
+        case "danger-button":
+            return dangerButton
+        case "success-button":
+            return successButton
+        default:
+            break
+    } 
+}
+
+function renderActionButtons (buttonNames) { // ["Falta", "Real", "Envido", "Truco", "ReTruco", "Vale4", "Mazo"]
     buttonNames.forEach(name => {
+        let element = getButtonById(`${name.toLowerCase()}-button`)
         let classSuffix = name.includes("Mazo") ? "danger" : "success"
-        buttonsContainer.innerHTML += `<button id=${name.toLowerCase()}-button class="btn btn-${classSuffix}">${name}</button>`
-        createEventListener(`${name.toLowerCase()}-button`)
+        element.classList.remove("button-hidden")
+        element.classList.add("btn")
+        element.classList.add(`btn-${classSuffix}`)
+        element.innerText = name
     })
 }
 
@@ -398,13 +566,60 @@ function renderConfirmationButtons () {
     const buttonNames = ["Quiero", "No quiero"]
     buttonNames.forEach(name => {
         let classSuffix = name.includes("No") ? "danger" : "success"
-        buttonsContainer.innerHTML += `<button id=${classSuffix}-button class="btn btn-${classSuffix}">${name}</button>`
-        createEventListener(`${classSuffix}-button`)
+        let element = getButtonById(`${classSuffix}-button`)
+        element.classList.remove("button-hidden")
+        element.classList.add("btn")
+        element.classList.add(`btn-${classSuffix}`)
+        element.innerText = name
     })
 }
 
 function clearButtons() {
-    buttonsContainer.innerHTML = ''
+    envidoButtonNames.forEach(name => {
+        const element = getButtonById(`${name.toLowerCase()}-button`)
+        element.classList.remove("btn")
+        element.classList.remove("btn-success")
+        element.classList.add("button-hidden")
+    })
+
+    trucoButtonNames.forEach(name => {
+        const element = getButtonById(`${name.toLowerCase()}-button`)
+        element.classList.remove("btn")
+        element.classList.remove("btn-success")
+        element.classList.add("button-hidden")
+    })
+
+    confirmationButtonNames.forEach(name => {
+        const element = getButtonById(`${name.toLowerCase()}-button`)
+        element.classList.remove("btn")
+        element.classList.remove(`btn-${name.toLowerCase()}`)
+        element.classList.add("button-hidden")
+    })
+
+    mazoButton.classList.remove("btn")
+    mazoButton.classList.remove("btn-danger")
+    mazoButton.classList.add("button-hidden")
+}
+
+function renderButtonsAfterMachineDropCard() {
+    let eState = parseInt(localStorage.getItem("envidoState"))
+    let trucoState = parseInt(localStorage.getItem("trucoState"))
+    let isEnvidoEnabled = localStorage.getItem("isEnvidoEnabled")
+    let isTrucoEnabled = localStorage.getItem("isTrucoEnabled")
+
+    if (eState == 0 && trucoState == 0){
+        renderActionButtons(["Truco", "Mazo"])
+        renderActionButtons(envidoButtonNames)
+    }
+    if (eState >= 1 && isEnvidoEnabled == "false" && trucoState == 0) {
+        renderActionButtons(["Truco", "Mazo"])
+    }
+    if (players[0].playedTruco == "true" && trucoState == 2){
+        renderActionButtons(["Vale4", "Mazo"])
+    }
+    if (players[0].playedTruco == "false" && trucoState == 1){
+        renderActionButtons(["ReTruco", "Mazo"])
+    }
 }
 
 //-- cards --
@@ -460,49 +675,89 @@ function setEnvidoLocalStorageValues(envidoState) {
 window.onload = () => {
     localStorage.clear()
     localStorage.setItem("starter", Math.floor(Math.random() * 2))
+    addButtonsEventListeners()
     startTurn()
+}
+
+function addButtonsEventListeners() {
+    envidoButtonNames.forEach(name => {
+        createEventListener(`${name.toLowerCase()}-button`)
+    })
+
+    trucoButtonNames.forEach(name => {
+        createEventListener(`${name.toLowerCase()}-button`)
+    })
+
+    confirmationButtonNames.forEach(name => {
+        createEventListener(`${name.toLowerCase()}-button`)
+    })
+
+    createEventListener(`mazo-button`)
 }
 
 function createEventListener(elementId) {
     let element = document.getElementById(elementId)
     if (elementId == "card-1") {
-        element.addEventListener('click', (event) => {
-            let card = players[0].hand[0]
-            players[0].hand[0].dropped = true
-            players[0].hand[0].boardSlot = players[0].hand.filter(card => card.dropped).length
-            renderCardInSlot('own', players[0].hand[0].boardSlot, card)
-            element.remove()
-            clearButtons()
-            startMachinePlay()
+        element.addEventListener('click', () => {
+            if (isOwnDropCardEnabled()) {
+                let card = players[0].hand[0]
+                players[0].hand[0].dropped = true
+                players[0].hand[0].boardSlot = players[0].hand.filter(card => card.dropped).length
+                renderCardInSlot('own', players[0].hand[0].boardSlot, card)
+                element.remove()
+                clearButtons()
+                if (players[1].hand.every(card => card.dropped)){
+                    endTurn()
+                    startTurn()
+                } else {
+                    startMachinePlay()
+                }
+            }
         })
     }
 
     if (elementId == "card-2") {
-        element.addEventListener('click', (event) => {
-            let card = players[0].hand[1]
-            players[0].hand[1].dropped = true
-            players[0].hand[1].boardSlot = players[0].hand.filter(card => card.dropped).length
-            renderCardInSlot('own', players[0].hand[1].boardSlot, card)
-            element.remove()
-            clearButtons()
-            startMachinePlay()
+        let element = document.getElementById(elementId)
+        element.addEventListener('click', () => {
+            if (isOwnDropCardEnabled()) {
+                let card = players[0].hand[1]
+                players[0].hand[1].dropped = true
+                players[0].hand[1].boardSlot = players[0].hand.filter(card => card.dropped).length
+                renderCardInSlot('own', players[0].hand[1].boardSlot, card)
+                element.remove()
+                clearButtons()
+                if (players[1].hand.every(card => card.dropped)){
+                    endTurn()
+                    startTurn()
+                } else {
+                    startMachinePlay()
+                }
+            }
         })
     }
 
     if (elementId == "card-3") {
-        element.addEventListener('click', (event) => {
-            let card = players[0].hand[2]
-            players[0].hand[2].dropped = true
-            players[0].hand[2].boardSlot = players[0].hand.filter(card => card.dropped).length
-            renderCardInSlot('own', players[0].hand[2].boardSlot, card)
-            element.remove()
-            clearButtons()
-            startMachinePlay()
+        let element = document.getElementById(elementId)
+        element.addEventListener('click', () => {
+            if (isOwnDropCardEnabled()) {
+                let card = players[0].hand[2]
+                players[0].hand[2].dropped = true
+                players[0].hand[2].boardSlot = players[0].hand.filter(card => card.dropped).length
+                renderCardInSlot('own', players[0].hand[2].boardSlot, card)
+                element.remove()
+                clearButtons()
+                if (players[1].hand.every(card => card.dropped)){
+                    endTurn()
+                    startTurn()
+                } else {
+                    startMachinePlay()
+                }
+            }
         })
     }
 
     if (elementId == "envido-button") {
-        element.addEventListener('click', (event) => {
+        envidoButton.addEventListener('click', () => {
             setEnvidoLocalStorageValues(1)
             clearButtons()
             playMachineEnvido()
@@ -510,7 +765,7 @@ function createEventListener(elementId) {
     }
 
     if (elementId == "real-button") {
-        element.addEventListener('click', (event) => {
+        realButton.addEventListener('click', () => {
             setEnvidoLocalStorageValues(2)
             clearButtons()
             playMachineEnvido()
@@ -518,7 +773,7 @@ function createEventListener(elementId) {
     }
 
     if (elementId == "falta-button") {
-        element.addEventListener('click', (event) => {
+        faltaButton.addEventListener('click', () => {
             setEnvidoLocalStorageValues(3)
             clearButtons()
             playMachineEnvido()
@@ -526,12 +781,13 @@ function createEventListener(elementId) {
     }
 
     if (elementId == "success-button") {
-        element.addEventListener('click', (event) => {
+        successButton.addEventListener('click', () => {
             let isEnvidoEnabled = localStorage.getItem("isEnvidoEnabled")
             let isTrucoEnabled = localStorage.getItem("isTrucoEnabled")
             
             if (isEnvidoEnabled == "true") {
-                calculateEnvidoPoints()
+                let machinePoints = calculateEnvidoPoints()
+                renderMachineMessage(machinePoints < 20 ? "Mesa" : machinePoints)
                 localStorage.setItem("isEnvidoEnabled", false)
                 clearButtons()
                 startMachinePlay()
@@ -544,16 +800,17 @@ function createEventListener(elementId) {
     }
 
     if (elementId == "danger-button") {
-        element.addEventListener('click', (event) => {
+        dangerButton.addEventListener('click', () => {
             let isEnvidoEnabled = localStorage.getItem("isEnvidoEnabled")
             let isTrucoEnabled = localStorage.getItem("isTrucoEnabled")
-            let envidoState = localStorage.getItem("envidoState")
+            let envidoState = parseInt(localStorage.getItem("envidoState"))
             let trucoState = localStorage.getItem("trucoState")
 
             if (isEnvidoEnabled == "true") {
-                if (envidoState == "1") {
+                if (envidoState >= 1 && previousEnvidoState == 0) {
                     players[1].points += 1
                 } else {
+                    localStorage.setItem("envidoState", previousEnvidoState)
                     calculateEnvidoPoints()
                 }
                 localStorage.setItem("isEnvidoEnabled", false)
@@ -568,12 +825,35 @@ function createEventListener(elementId) {
     }
 
     if (elementId == "mazo-button") {
-        element.addEventListener('click', (event) => {
-            players[1].points += 1
-            clearButtons()
-            clearCardSlots()
+        mazoButton.addEventListener('click', () => {
+            let isTrucoEnabled = localStorage.getItem("isTrucoEnabled")
+            players[1].points += isTrucoEnabled == "true" ? 0 : 1
             endTurn()
             startTurn()
         })
     }
+}
+
+function isOwnDropCardEnabled() {
+    let starter = localStorage.getItem("starter")
+    let machineHand = players[1].hand || []
+    let ownHand = players[0].hand || []
+
+    let machineDroppedCardCount = machineHand.filter(card => card.dropped).length
+    let ownDroppedCardCount = ownHand.filter(card => card.dropped).length
+
+    let ownLastPlayedCard = ownHand.find(card => card.boardSlot === ownDroppedCardCount)
+    let machineLastPlayedCard = machineHand.find(card => card.boardSlot === machineDroppedCardCount)
+
+    let ownLastPlayedCardPower = ownLastPlayedCard ? ownLastPlayedCard.power : -1
+    let machineLastPlayedCardPower = machineLastPlayedCard ? machineLastPlayedCard.power : -1
+
+    if ((starter === "0" && !ownHand.some(card => card.dropped)) || 
+        (ownDroppedCardCount < machineDroppedCardCount) ||
+        (starter == "0" && ownDroppedCardCount == machineDroppedCardCount && ownLastPlayedCardPower == machineLastPlayedCardPower) ||
+        (ownDroppedCardCount > 0 && ownDroppedCardCount === machineDroppedCardCount && ownLastPlayedCardPower > machineLastPlayedCardPower)) {
+        return true
+    }
+
+    return false
 }
