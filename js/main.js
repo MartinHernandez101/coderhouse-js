@@ -278,7 +278,6 @@ function getValidMachineDecision(isEnvidoEnabled, envidoState, isTrucoEnabled, t
 
     while (!validChoice) {
         let randomChoice = Math.floor(Math.random() * 2)
-        console.log(randomChoice)
         if (randomChoice == 0) {
             if (isEnvidoEnabled == "true" || isTrucoEnabled == "true") {
                 continue
@@ -364,7 +363,7 @@ function shouldTurnEnd() {
         }
     }
 
-    return ownRounds >= 2 || machineRounds >= 2;
+    return ownRounds >= 2 || machineRounds >= 2
 }
 
 function startMachinePlay() {
