@@ -5,6 +5,7 @@ const envidoButtonNames = ["Envido", "Real", "Falta" ]
 const trucoButtonNames = ["Truco", "ReTruco", "Vale4"]
 const confirmationButtonNames = ["success", "danger"]
 let previousEnvidoState = 0
+let trucoStates = [0, 0]
 let players = []
 
 const createDeck = () => {
@@ -108,13 +109,9 @@ const createPlayers = () => {
 }
 
 function calculatePointsForTurnEnd() {
-    let trucoState = parseInt(localStorage.getItem("trucoState"))
     let starter = localStorage.getItem("starter")
     let machineHand = players[1].hand || []
     let ownHand = players[0].hand || []
-
-    let ownRounds = 0
-    let machineRounds = 0
 
     let roundResults = []
 
@@ -124,41 +121,164 @@ function calculatePointsForTurnEnd() {
 
         if (ownPlayedCard && machinePlayedCard) {
             if (ownPlayedCard.power > machinePlayedCard.power) {
-                ownRounds++
                 roundResults[i] = "own"
             } else if (ownPlayedCard.power < machinePlayedCard.power) {
-                machineRounds++
                 roundResults[i] = "machine"
             } else {
                 if (starter == "0") {
-                    ownRounds++
                     roundResults[i] = "own"
                 } else {
-                    machineRounds++
                     roundResults[i] = "machine"
                 }
             }
         }
     }
 
+    calculateTrucoPoints(roundResults, trucoStates)
+}
+
+function calculateTrucoPoints(roundResults, trucoStates) {
     if (roundResults.length >= 2) {
         if (roundResults[0] === roundResults[1]) {
-            if (trucoState == 0) {
+            if (trucoStates[0] == 0) {
                 players[0].points += roundResults[0] == "own" ? 1 : 0
                 players[1].points += roundResults[0] == "machine" ? 1 : 0
+            } else if (trucoStates[0] == 1) {
+                players[0].points += roundResults[0] == "own" && trucoStates[1] == 0 ? 1 : roundResults[0] == "own" && trucoStates[1] == 1 ? 2 : 0
+                players[1].points += roundResults[0] == "machine" && trucoStates[1] == 0 ? 1 : roundResults[0] == "machine" && trucoStates[1] == 1 ? 2 : 0
+            } else if (trucoStates[0] == 2) {
+                players[0].points += roundResults[0] == "own" && trucoStates[1] == 0 ? 2 : roundResults[0] == "own" && trucoStates[1] == 1 ? 3 : 0
+                players[1].points += roundResults[0] == "machine" && trucoStates[1] == 0 ? 2 : roundResults[0] == "machine" && trucoStates[1] == 1 ? 3 : 0
+            } else if (trucoStates[0] == 3) {
+                players[0].points += roundResults[0] == "own" && trucoStates[1] == 0 ? 3 : roundResults[0] == "own" && trucoStates[1] == 1 ? 4 : 0
+                players[1].points += roundResults[0] == "machine" && trucoStates[1] == 0 ? 3 : roundResults[0] == "machine" && trucoStates[1] == 1 ? 4 : 0
             }
-            return true
-        } else if (roundResults[1] === "own" && roundResults[2] === "own") {
-            players[0].points += trucoState == 3 ? 4 : trucoState == 2 ? 3 : trucoState == 1 ? 2 : 1
-            return true
-        } else if (roundResults[1] === "machine" && roundResults[2] === "machine") {
-            players[1].points += trucoState == 3 ? 4 : trucoState == 2 ? 3 : trucoState == 1 ? 2 : 1
-            return true
+            return
+        } else if (roundResults.filter((result) => result == "own").length >= 2) {
+            if (trucoStates[0] == 0) {
+                players[0].points += 1
+            } else if (trucoStates[0] == 1) {
+                players[0].points += trucoStates[1] == 0 ? 1 : 2
+            } else if (trucoStates[0] == 2) {
+                players[0].points += trucoStates[1] == 0 ? 2 : 3
+            } else if (trucoStates[0] == 3) {
+                players[0].points += trucoStates[1] == 0 ? 3 : 4
+            }
+            return
+        } else if (roundResults.filter((result) => result == "machine").length >= 2) {
+            if (trucoStates[0] == 0) {
+                players[1].points += 1
+            } else if (trucoStates[0] == 1) {
+                players[1].points += trucoStates[1] == 0 ? 1 : 2
+            } else if (trucoStates[0] == 2) {
+                players[1].points += trucoStates[1] == 0 ? 2 : 3
+            } else if (trucoStates[0] == 3) {
+                players[1].points += trucoStates[1] == 0 ? 3 : 4
+            }
         }
     }
-
-    return false
+    return
 }
+
+function playMachineTruco() {
+    let tState = parseInt(localStorage.getItem("trucoState"))
+    let eState = parseInt(localStorage.getItem("envidoState"))
+    let isTrucoEnabled = localStorage.getItem("isTrucoEnabled")
+
+    if (isTrucoEnabled == "false") {
+        players[1].playedTruco = true
+        trucoStates = [1, 0]
+        renderMachineMessage("Truco!")
+        localStorage.setItem("isTrucoEnabled", true)
+        localStorage.setItem("trucoState", 1)
+        clearButtons()
+        if (isFirstRoundOver() || eState >= 1){
+            renderActionButtons(["ReTruco"])
+        } else {
+            renderActionButtons(["ReTruco", "Envido"])
+        }
+        
+        renderConfirmationButtons()
+    } else {
+        handleTrucoChoice(tState)
+    }
+}
+
+function handleTrucoChoice(tState) {
+    let trucoHandled = false
+    let machinePlayedTruco = players[1].playedTruco
+    let choices = []
+
+    while (trucoHandled == false) {
+        let randomChoice = Math.floor(Math.random() * 3)
+        choices.push(randomChoice)
+
+        if (tState == 1) {
+            if (randomChoice == 0 && !machinePlayedTruco) {
+                renderMachineMessage("Quiero re truco!!!")
+                localStorage.setItem("trucoState", 2)
+                trucoStates = [2, 0]
+                clearButtons()
+                renderActionButtons(["Vale4"])
+                renderConfirmationButtons()
+                trucoHandled = true
+            }
+            if (randomChoice == 1 && !machinePlayedTruco) {
+                renderMachineMessage("Quiero!")
+                trucoStates = [1, 1]
+                clearButtons()
+                trucoHandled = true
+            }
+            if (randomChoice == 2 && !machinePlayedTruco) {
+                renderMachineMessage("No quiero!")
+                localStorage.setItem("trucoState", 0)
+                clearButtons()
+                endTurn()
+                startTurn()
+                trucoHandled = true
+            }
+        }
+        if (tState == 2) {
+            if (randomChoice == 0 && machinePlayedTruco) {
+                renderMachineMessage("Quiero vale 4!!!")
+                localStorage.setItem("trucoState", 3)
+                trucoStates = [3, 0]
+                clearButtons()
+                renderConfirmationButtons()
+                trucoHandled = true
+            }
+            if (randomChoice == 1 && machinePlayedTruco) {
+                renderMachineMessage("No quiero!")
+                localStorage.setItem("trucoState", 2)
+                clearButtons()
+                endTurn()
+                startTurn()
+                trucoHandled = true
+            }
+        }
+        if (tState == 3) {
+            if (randomChoice == 0 && !machinePlayedTruco) {
+                renderMachineMessage("Quiero!!!")
+                trucoStates = [3, 1]
+                clearButtons()
+                trucoHandled = true
+            }
+            if (randomChoice == 1 && !machinePlayedTruco) 
+            {
+                renderMachineMessage("No quiero!")
+                localStorage.setItem("trucoState", 2)
+                clearButtons()
+                endTurn()
+                startTurn()
+                trucoHandled = true
+            }
+        }
+        
+        if (choices.includes(0) && choices.includes(1) && choices.includes(2)){
+            trucoHandled = true
+        }
+    }
+} 
  
 function calculateEnvidoPoints () {
     let playerCards = []
@@ -210,6 +330,7 @@ function playMachineEnvido () {
         renderConfirmationButtons()
     } else {
         handleEnvidoChoice(envidoState)
+        shouldMachinePlayAgain()
     }
 }
 
@@ -217,12 +338,11 @@ function handleEnvidoChoice(envidoState) {
     let choice = Math.floor(Math.random() * 5)
     
     if (choice == 0 && envidoState >= 1) {
-        renderMachineMessage("Quiero!")
         clearButtons()
         localStorage.setItem("isEnvidoEnabled", false)
         renderActionButtons(["Truco", "Mazo"])
         let machinePoints = calculateEnvidoPoints()
-        renderMachineMessage(machinePoints < 20 ? "Mesa" : machinePoints)
+        renderMachineMessage(machinePoints < 20 ? "Quiero, mesa" : `Quiero ${machinePoints}`)
     } else if (choice == 1 && envidoState <= 1) {
         renderMachineMessage("Real envido!")
         localStorage.setItem("envidoState", 2)
@@ -239,8 +359,7 @@ function handleEnvidoChoice(envidoState) {
         if (envidoState == 1 || previousEnvidoState == 0) {
             players[0].points += 1
         } else {
-            players[0].points += previousEnvidoState > 0 ? 1 : 0
-            calculateEnvidoPoints()
+            players[0].points += envidoState == 2 ? 2 : 3
         }
         localStorage.setItem("isEnvidoEnabled", false)
         clearButtons()
@@ -248,6 +367,22 @@ function handleEnvidoChoice(envidoState) {
     } else {
         handleEnvidoChoice(envidoState)
     }
+}
+
+function isFirstRoundOver() {
+    return players[0].hand.filter((card) => card.dropped == true).length >= 1 && players[1].hand.filter((card) => card.dropped == true).length >= 1
+}
+
+function machineHasTheQuiero(trucoState) {
+    let playedTruco = players[1].playedTruco
+    if (playedTruco == true && trucoState == 1) return false
+    if (playedTruco == true && trucoState == 2) return true
+    if (playedTruco == true && trucoState == 3) return false
+    if (playedTruco == false && trucoState == 1) return true
+    if (playedTruco == false && trucoState == 2) return false
+    if (playedTruco == false && trucoState == 3) return true
+
+    return false
 }
 
 function dropMachineCard() {
@@ -275,26 +410,29 @@ function getValidMachineDecision(isEnvidoEnabled, envidoState, isTrucoEnabled, t
     let validChoice = false
     let decision = ""
     let eState = parseInt(envidoState)
+    let tState = parseInt(trucoState)
 
-    while (!validChoice) {
-        let randomChoice = Math.floor(Math.random() * 2)
+    let choices = []
+    while (!validChoice || !(choices.includes(1) && choices.includes(2) && choices.includes(0))) {
+        let randomChoice = Math.floor(Math.random() * 3)
+        choices.push(randomChoice)
+
         if (randomChoice == 0) {
-            if (isEnvidoEnabled == "true" || isTrucoEnabled == "true") {
+            if (isEnvidoEnabled == "true") {
                 continue
             }
 
             decision = "dropCard"
             validChoice = true
-        } else if (randomChoice == 1) {
-            if ((isEnvidoEnabled == "false" && eState == 0) || (isEnvidoEnabled == "true" && eState > 0)) {
+        } else if (randomChoice == 1 && !isFirstRoundOver()) {
+            if (((isEnvidoEnabled == "false" && eState == 0) || (isEnvidoEnabled == "true" && eState > 0)) && tState == 0) {
                 decision = "playEnvido"
                 validChoice = true
             }
+        } else if (isEnvidoEnabled == "false" || machineHasTheQuiero(tState)) {
+            decision = "playTruco"
+            validChoice = true
         }
-        // else {
-        //     decision = "playTruco"
-        //     validChoice = true
-        // }
     }
 
     return decision
@@ -312,11 +450,10 @@ function getMachineDecision() {
         renderButtonsAfterMachineDropCard()
     } else if (decision === "playEnvido") {
         playMachineEnvido()
-    } 
-    // else if (decision === "playTruco") {
-    //     playMachineTruco()
-    // }
-
+    } else if (decision === "playTruco") {
+        playMachineTruco()
+    }
+    
     return decision
 }
 
@@ -324,7 +461,7 @@ function shouldTurnEnd() {
     let starter = localStorage.getItem("starter")
     let machineHand = players[1].hand || []
     let ownHand = players[0].hand || []
-
+    
     let ownRounds = 0
     let machineRounds = 0
 
@@ -356,31 +493,44 @@ function shouldTurnEnd() {
     if (roundResults.length >= 2) {
         if (roundResults[0] === roundResults[1]) {
             return true
-        } else if (roundResults[1] === "own" && roundResults[2] === "own") {
+        } else if (roundResults.filter((result) => result == "own").length >= 2) {
             return true
-        } else if (roundResults[1] === "machine" && roundResults[2] === "machine") {
+        } else if (roundResults.filter((result) => result == "machine").length >= 2) {
             return true
         }
     }
-
+    
     return ownRounds >= 2 || machineRounds >= 2
 }
 
 function startMachinePlay() {
-    setTimeout(() => {
-        getMachineDecision()
-    }, 1000)
-
-    setTimeout(() => {
-        shouldMachinePlayAgain()   
-    }, 1200)
-
-    setTimeout(() => {
-        if (shouldTurnEnd()){
-            endTurn()
-            startTurn()
-        }
-    }, 1300)
+    try {
+        setTimeout(() => {
+            getMachineDecision()
+        }, 1000)
+    
+        setTimeout(() => {
+            shouldMachinePlayAgain()   
+        }, 1200)
+    
+        setTimeout(() => {
+            if (shouldTurnEnd()){
+                endTurn()
+                startTurn()
+            }
+        }, 1300)
+    } catch (error) {
+        Swal.fire({
+            title: "Uhh se pudrió todo!",
+            icon: "error",
+            text: "Le pedimos disculpas ocurrió un error :(",
+            confirmButtonText: "Reiniciar juego"
+        }).then((result) => {
+            if (result.isConfirmed) {
+                window.location.href = "../index.html"
+            }
+        })
+    }
 }
 
 function shouldMachinePlayAgain() {
@@ -388,6 +538,10 @@ function shouldMachinePlayAgain() {
     let isEnvidoEnabled = localStorage.getItem("isEnvidoEnabled")
 
     if (isEnvidoEnabled == "true"){
+        return
+    }
+
+    if ((players[1].playedTruco == true && trucoStates[0] == 1 && trucoStates[1] == 0) || (players[1].playedTruco == true && trucoStates[0] == 3 && trucoStates[1] == 0)){
         return
     }
 
@@ -403,6 +557,8 @@ function shouldMachinePlayAgain() {
         if (mLastPlayedCard[0].power > pLastPlayedCard[0].power || (mLastPlayedCard[0].power == pLastPlayedCard[0].power && starter == 1)) {
             startMachinePlay()
         }
+    } else if (mDroppedCards.length == pDroppedCards.length && pDroppedCards.length == 0 && starter == 1) {
+        startMachinePlay()
     }
 }
 
@@ -434,8 +590,32 @@ function shouldDropCard() {
     return false
 }
 
+function endGame() {
+    let playerStoragePoints = parseInt(localStorage.getItem("playerPoints"))
+    let machineStoragePoints = parseInt(localStorage.getItem("machinePoints"))
+    
+    Swal.fire({
+        title: playerStoragePoints > machineStoragePoints ? "Felicidades ganaste!!!" : "Gana Gardel!!!",
+        icon: playerStoragePoints > machineStoragePoints ? "success" : "error",
+        showCancelButton: true,
+        confirmButtonText: "Nuevo juego",
+        cancelButtonText: "Salir",
+    }).then((result) => {
+        if (result.isConfirmed) {
+            localStorage.setItem("starter", 0)
+            localStorage.setItem("playerPoints", 0)
+            localStorage.setItem("machinePoints", 0)
+            clearPoints()
+            startTurn()
+        } else {
+            window.location.href = "../index.html"
+        }
+    });
+}
+
 const startTurn = () => {
     previousEnvidoState = 0
+    trucoStates = [0, 0]
     createPlayers()
     clearCardSlots()
     clearButtons()
@@ -444,15 +624,22 @@ const startTurn = () => {
     localStorage.setItem("isEnvidoEnabled", false)
     localStorage.setItem("isTrucoEnabled", false)
     let starter = localStorage.getItem("starter")
-    
-    if (starter == "0") {
-        renderMachineMessage("Empezas vos")
-        renderActionButtons(["Envido", "Real", "Falta", "Truco", "Mazo"])
-        renderPlayerCards()
+    let playerStoragePoints = localStorage.getItem("playerPoints")
+    let machineStoragePoints = localStorage.getItem("machinePoints")
+
+    if ((playerStoragePoints && parseInt(playerStoragePoints) >= 30) || (machineStoragePoints && parseInt(machineStoragePoints) >= 30)) {
+        endGame()
     } else {
-        renderPlayerCards()
-        renderActionButtons(["Envido", "Real", "Falta", "Truco", "Mazo"])
-        startMachinePlay()
+        if (starter == "0") {
+            renderMachineMessage("Empezas vos")
+            renderActionButtons(["Envido", "Real", "Falta", "Truco", "Mazo"])
+            renderPlayerCards()
+        } else {
+            renderMachineMessage("Empiezo yo")
+            renderPlayerCards()
+            renderActionButtons(["Envido", "Real", "Falta", "Truco", "Mazo"])
+            startMachinePlay()
+        }
     }
 }
 
@@ -487,6 +674,14 @@ function renderPoints() {
 
     ownPointsDiv.innerText = localStorage.getItem("playerPoints")
     machinePointsDiv.innerText = localStorage.getItem("machinePoints")
+}
+
+function clearPoints() {
+    const machinePointsDiv = document.getElementById("machine-points")
+    const ownPointsDiv = document.getElementById("own-points")
+
+    ownPointsDiv.innerText = "0"
+    machinePointsDiv.innerText = "0"
 }
 
 //-- card slots --
@@ -604,7 +799,6 @@ function renderButtonsAfterMachineDropCard() {
     let eState = parseInt(localStorage.getItem("envidoState"))
     let trucoState = parseInt(localStorage.getItem("trucoState"))
     let isEnvidoEnabled = localStorage.getItem("isEnvidoEnabled")
-    let isTrucoEnabled = localStorage.getItem("isTrucoEnabled")
 
     if (eState == 0 && trucoState == 0){
         renderActionButtons(["Truco", "Mazo"])
@@ -613,10 +807,10 @@ function renderButtonsAfterMachineDropCard() {
     if (eState >= 1 && isEnvidoEnabled == "false" && trucoState == 0) {
         renderActionButtons(["Truco", "Mazo"])
     }
-    if (players[0].playedTruco == "true" && trucoState == 2){
+    if (players[0].playedTruco == true && trucoState == 2){
         renderActionButtons(["Vale4", "Mazo"])
     }
-    if (players[0].playedTruco == "false" && trucoState == 1){
+    if (players[0].playedTruco == false && trucoState == 1){
         renderActionButtons(["ReTruco", "Mazo"])
     }
 }
@@ -757,6 +951,7 @@ function createEventListener(elementId) {
 
     if (elementId == "envido-button") {
         envidoButton.addEventListener('click', () => {
+            trucoStates = [0, 0]
             setEnvidoLocalStorageValues(1)
             clearButtons()
             playMachineEnvido()
@@ -779,10 +974,41 @@ function createEventListener(elementId) {
         })
     }
 
+    if (elementId == "truco-button") {
+        trucoButton.addEventListener('click', () => {
+            localStorage.setItem("trucoState", 1)
+            localStorage.setItem("isTrucoEnabled", true)
+            players[0].playedTruco = true
+            players[1].playedTruco = false
+            trucoStates = [1, 0]
+            clearButtons()
+            playMachineTruco()
+        })
+    }
+
+    if (elementId == "retruco-button") {
+        retrucoButton.addEventListener('click', () => {
+            localStorage.setItem("trucoState", 2)
+            trucoStates = [2, 0]
+            clearButtons()
+            playMachineTruco()
+        })
+    }
+
+    if (elementId == "vale4-button") {
+        vale4Button.addEventListener('click', () => {
+            localStorage.setItem("trucoState", 3)
+            trucoStates = [3, 0]
+            clearButtons()
+            playMachineTruco()
+        })
+    }
+
     if (elementId == "success-button") {
         successButton.addEventListener('click', () => {
             let isEnvidoEnabled = localStorage.getItem("isEnvidoEnabled")
             let isTrucoEnabled = localStorage.getItem("isTrucoEnabled")
+            let tState = parseInt(localStorage.getItem("trucoState"))
             
             if (isEnvidoEnabled == "true") {
                 let machinePoints = calculateEnvidoPoints()
@@ -793,7 +1019,11 @@ function createEventListener(elementId) {
             }
 
             if (isTrucoEnabled == "true") {
-
+                trucoStates = [tState, 1]
+                clearButtons()
+                dropMachineCard()
+                renderButtonsAfterMachineDropCard()
+                shouldMachinePlayAgain()
             }
         })
     }
@@ -803,7 +1033,7 @@ function createEventListener(elementId) {
             let isEnvidoEnabled = localStorage.getItem("isEnvidoEnabled")
             let isTrucoEnabled = localStorage.getItem("isTrucoEnabled")
             let envidoState = parseInt(localStorage.getItem("envidoState"))
-            let trucoState = localStorage.getItem("trucoState")
+            let trucoState = parseInt(localStorage.getItem("trucoState"))
 
             if (isEnvidoEnabled == "true") {
                 if (envidoState >= 1 && previousEnvidoState == 0) {
@@ -818,7 +1048,10 @@ function createEventListener(elementId) {
             }
 
             if (isTrucoEnabled == "true") {
-
+                localStorage.setItem("trucoState", trucoState - 1)
+                clearButtons()
+                endTurn()
+                startTurn()
             }
         })
     }
@@ -837,6 +1070,10 @@ function isOwnDropCardEnabled() {
     let starter = localStorage.getItem("starter")
     let machineHand = players[1].hand || []
     let ownHand = players[0].hand || []
+
+    if (trucoStates[0] != 0 && trucoStates[1] == 0) {
+        return false
+    }
 
     let machineDroppedCardCount = machineHand.filter(card => card.dropped).length
     let ownDroppedCardCount = ownHand.filter(card => card.dropped).length
